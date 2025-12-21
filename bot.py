@@ -79,11 +79,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------------- RUN BOT ---------------- #
 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+from flask import Flask, request
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# Flask web app
+web_app = Flask(__name__)
 
-    print("🌿 CalmNest bot is running...")
-    app.run_polling()
+# Telegram application (no polling)
+telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+@web_app.route("/", methods=["GET"])
+def health():
+    return "CalmNest is alive 🌿"
+
+@web_app.route("/webhook", methods=["POST"])
+async def webhook():
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    await telegram_app.process_update(update)
+    return "ok"
+

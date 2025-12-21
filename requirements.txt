@@ -1,2 +1,5 @@
+flask
+python-telegram-bot>=21.0
 groq
-python-telegram-bot
+gunicorn
+
