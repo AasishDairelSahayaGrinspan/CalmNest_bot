@@ -1,6 +1,7 @@
 fastapi
-uvicorn
 gunicorn
+uvicorn
 python-telegram-bot==20.*
 groq
+
 
