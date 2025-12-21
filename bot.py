@@ -1,102 +1,82 @@
 import os
 import asyncio
-from groq import Groq
+from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     MessageHandler,
     ContextTypes,
     filters,
 )
+from groq import Groq
 
-# ---------------- SAFETY FILTER ---------------- #
+# ---------------- ENV ---------------- #
 
-EXTREME_WORDS = [
-    "suicide",
-    "kill myself",
-    "end my life",
-    "want to die",
-    "self harm",
-    "no reason to live",
-]
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-def is_extreme_message(text: str) -> bool:
-    text = text.lower()
-    return any(word in text for word in EXTREME_WORDS)
+# ---------------- AI ---------------- #
 
-# ---------------- GROQ AI ---------------- #
-
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=GROQ_API_KEY)
 
 SYSTEM_PROMPT = """
 You are CalmNest, a calm and supportive mental wellbeing assistant.
-Do not give medical advice or diagnoses.
-Be empathetic, warm, and non-judgmental.
-Keep responses short and comforting.
-Encourage reflection and healthy coping.
+Do not give medical advice.
+Be empathetic and concise.
 """
 
-def get_ai_reply(user_message: str) -> str:
+def get_ai_reply(text: str) -> str:
     completion = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
+            {"role": "user", "content": text},
         ],
         max_tokens=150,
         temperature=0.6,
     )
     return completion.choices[0].message.content
 
-# ---------------- TELEGRAM BOT ---------------- #
-
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# ---------------- TELEGRAM HANDLERS ---------------- #
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Hi, I’m CalmNest 🌿\n"
-        "You can talk to me anytime. I’m here to listen."
-    )
+    await update.message.reply_text("Hi, I’m CalmNest 🌿\nI’m here to listen.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
+    reply = await asyncio.to_thread(get_ai_reply, update.message.text)
+    await update.message.reply_text(reply)
 
-    if is_extreme_message(user_text):
-        await update.message.reply_text(
-            "I’m really glad you reached out.\n"
-            "You deserve real support.\n"
-            "Please talk to someone you trust or a mental health professional.\n"
-            "If you’re in immediate danger, contact local emergency services."
-        )
-        return
+# ---------------- APP INIT ---------------- #
 
-    # 🔑 Run Groq call in background thread
-    ai_reply = await asyncio.to_thread(get_ai_reply, user_text)
-
-    await update.message.reply_text(ai_reply)
-
-
-# ---------------- RUN BOT ---------------- #
-
-from flask import Flask, request
-
-# Flask web app
-web_app = Flask(__name__)
-
-# Telegram application (no polling)
-telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
-
+telegram_app = Application.builder().token(BOT_TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-@web_app.route("/", methods=["GET"])
-def health():
-    return "CalmNest is alive 🌿"
+# ---------------- FASTAPI ---------------- #
 
-@web_app.route("/webhook", methods=["POST"])
-async def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+app = FastAPI()
+
+@app.on_event("startup")
+async def startup():
+    await telegram_app.initialize()
+    await telegram_app.start()
+
+@app.on_event("shutdown")
+async def shutdown():
+    await telegram_app.stop()
+
+@app.get("/")
+async def health():
+    return {"status": "CalmNest is alive 🌿"}
+
+@app.post("/webhook")
+async def telegram_webhook(req: Request):
+    data = await req.json()
+    update = Update.de_json(data, telegram_app.bot)
     await telegram_app.process_update(update)
-    return "ok"
+    return {"ok": True}
+
+# For gunicorn
+web_app = app
 
