@@ -16,14 +16,19 @@ from groq import Groq
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# ---------------- AI ---------------- #
+if not BOT_TOKEN:
+    raise RuntimeError("TELEGRAM_BOT_TOKEN not set")
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY not set")
+
+# ---------------- GROQ AI ---------------- #
 
 client = Groq(api_key=GROQ_API_KEY)
 
 SYSTEM_PROMPT = """
 You are CalmNest, a calm and supportive mental wellbeing assistant.
-Do not give medical advice.
-Be empathetic and concise.
+Do not give medical advice or diagnoses.
+Be empathetic, warm, and concise.
 """
 
 def get_ai_reply(text: str) -> str:
@@ -41,42 +46,54 @@ def get_ai_reply(text: str) -> str:
 # ---------------- TELEGRAM HANDLERS ---------------- #
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hi, I’m CalmNest 🌿\nI’m here to listen.")
+    await update.message.reply_text(
+        "Hi, I’m CalmNest 🌿\n"
+        "You can talk to me anytime. I’m here to listen."
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reply = await asyncio.to_thread(get_ai_reply, update.message.text)
-    await update.message.reply_text(reply)
+    try:
+        user_text = update.message.text
+        reply = await asyncio.to_thread(get_ai_reply, user_text)
+        await update.message.reply_text(reply)
+    except Exception as e:
+        print("AI error:", e)
+        await update.message.reply_text(
+            "I’m here with you 🌿\n"
+            "Let’s take a breath together."
+        )
 
-# ---------------- APP INIT ---------------- #
+# ---------------- TELEGRAM APP ---------------- #
 
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# ---------------- FASTAPI ---------------- #
+# ---------------- FASTAPI APP ---------------- #
 
 app = FastAPI()
 
 @app.on_event("startup")
 async def startup():
+    # IMPORTANT: initialize ONLY (no polling, no start())
     await telegram_app.initialize()
-    await telegram_app.start()
-
-@app.on_event("shutdown")
-async def shutdown():
-    await telegram_app.stop()
 
 @app.get("/")
 async def health():
     return {"status": "CalmNest is alive 🌿"}
 
 @app.post("/webhook")
-async def telegram_webhook(req: Request):
-    data = await req.json()
-    update = Update.de_json(data, telegram_app.bot)
-    await telegram_app.process_update(update)
-    return {"ok": True}
+async def telegram_webhook(request: Request):
+    try:
+        data = await request.json()
+        update = Update.de_json(data, telegram_app.bot)
+        await telegram_app.process_update(update)
+        return {"ok": True}
+    except Exception as e:
+        print("Webhook error:", e)
+        return {"ok": False}
 
-# For gunicorn
+# ---------------- GUNICORN ENTRYPOINT ---------------- #
+
 web_app = app
 
