@@ -1,6 +1,5 @@
 import os
 import asyncio
-import random
 from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
@@ -35,7 +34,7 @@ Keep responses gentle, empathetic, and concise.
 
 # ---------------- MEMORY ---------------- #
 
-# user_id -> { messages, last_interaction, last_checkin_slot }
+# user_id -> { messages, last_interaction }
 user_memory = {}
 
 def save_message(user_id: int, role: str, content: str):
@@ -43,7 +42,6 @@ def save_message(user_id: int, role: str, content: str):
         user_memory[user_id] = {
             "messages": [],
             "last_interaction": asyncio.get_event_loop().time(),
-            "last_checkin_slot": None
         }
 
     user_memory[user_id]["messages"].append({
@@ -51,40 +49,11 @@ def save_message(user_id: int, role: str, content: str):
         "content": content
     })
 
-    # Keep last 6 messages
+    # Keep last 6 messages only
     if len(user_memory[user_id]["messages"]) > 6:
         user_memory[user_id]["messages"].pop(0)
 
     user_memory[user_id]["last_interaction"] = asyncio.get_event_loop().time()
-
-# ---------------- TIME SLOTS ---------------- #
-
-def get_time_slot():
-    hour = int(asyncio.get_event_loop().time() // 3600 % 24)
-
-    if 5 <= hour < 12:
-        return "morning"
-    elif 12 <= hour < 17:
-        return "afternoon"
-    elif 17 <= hour < 21:
-        return "evening"
-    else:
-        return "night"
-
-CHECKIN_MESSAGES = {
-    "morning": [
-        "Good morning 🌤️ Hope today feels gentle on you."
-    ],
-    "afternoon": [
-        "Just a small afternoon check-in 🤍 Take a breath if you can."
-    ],
-    "evening": [
-        "Good evening 🌆 I hope your day is winding down softly."
-    ],
-    "night": [
-        "Good night 🌙 Be kind to yourself today."
-    ]
-}
 
 # ---------------- AI RESPONSE ---------------- #
 
@@ -95,33 +64,10 @@ def get_ai_reply(memory_messages: list) -> str:
             {"role": "system", "content": SYSTEM_PROMPT},
             *memory_messages
         ],
-        max_tokens=150,
+        max_tokens=220,
         temperature=0.6,
     )
     return completion.choices[0].message.content
-
-# ---------------- GENTLE CHECK-IN TASK ---------------- #
-
-async def gentle_checkin_task():
-    while True:
-        await asyncio.sleep(10 * 60)  # check every 10 minutes
-        current_slot = get_time_slot()
-
-        for user_id, data in user_memory.items():
-            # Only users who have interacted
-            if not data["messages"]:
-                continue
-
-            # Already sent in this time slot
-            if data["last_checkin_slot"] == current_slot:
-                continue
-
-            try:
-                message = random.choice(CHECKIN_MESSAGES[current_slot])
-                await telegram_app.bot.send_message(user_id, message)
-                data["last_checkin_slot"] = current_slot
-            except Exception as e:
-                print("Check-in error:", e)
 
 # ---------------- TELEGRAM HANDLERS ---------------- #
 
@@ -163,7 +109,6 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup():
     await telegram_app.initialize()
-    asyncio.create_task(gentle_checkin_task())
 
 @app.get("/")
 async def health():
