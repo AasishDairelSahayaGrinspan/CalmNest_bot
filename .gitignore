@@ -8,6 +8,9 @@ venv/
 .env
 .env.*
 
+# Database
+*.db
+
 # Editor / OS
 .DS_Store
 .vscode/

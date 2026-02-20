@@ -1,41 +1,118 @@
-# Changelog
+# 🌿 CalmNest Bot
 
-All notable changes to this project will be documented in this file.
+A warm, empathetic **mental wellbeing companion** on Telegram — powered by AI.
 
----
-
-## [1.1.0] 
-
-### Added
-- Conversation memory (remembers last 6 messages per user)
-- Context-aware AI responses using recent conversation history
-- Gentle automatic check-in messages based on time of day:
-  - Morning
-  - Afternoon
-  - Evening
-  - Night
-- Anti-spam logic (only one message per time slot)
-- Ethical system prompt to avoid medical advice and diagnoses
-- Background scheduler for automatic wellbeing pings
-
-### Changed
-- Updated message handling to include user-specific context
-- Improved response tone to be more calm, empathetic, and concise
-- Refactored AI calls to include conversation memory
-
-### Notes
-- Memory is currently in-memory and resets on server restart
-- Time slots are based on server time
-- Users must interact at least once before receiving check-ins
+CalmNest listens without judgment, offers gentle support, and sends optional daily check-ins. It **does not** provide medical advice or diagnoses.
 
 ---
 
-## [1.0.0] – Initial Release
+## ✨ Features
 
-### Added
-- Telegram bot integration using webhooks
-- FastAPI backend
-- Groq LLM integration for AI responses
-- Basic message handling
-- Health check endpoint
+- 💬 **Empathetic AI conversations** — powered by Llama 3.3 70B via Groq
+- 🧠 **Persistent memory** — remembers your last 6 messages (SQLite-backed, survives restarts)
+- ⏰ **Scheduled check-ins** — gentle morning, afternoon, evening & night messages (opt-in)
+- 🛡️ **Rate limiting** — webhook abuse protection
+- 🔒 **Ethical guardrails** — system prompt prevents medical advice/diagnoses
 
+## 🧰 Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Bot Platform | Telegram (webhooks) |
+| Backend | FastAPI + Gunicorn |
+| AI / LLM | Groq — Llama 3.3 70B Versatile |
+| Database | SQLite |
+| Scheduler | APScheduler |
+
+## 🚀 Setup
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/your-username/calmnest-bot.git
+cd calmnest-bot
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your keys:
+- **TELEGRAM_BOT_TOKEN** — get from [@BotFather](https://t.me/BotFather)
+- **GROQ_API_KEY** — get from [Groq Console](https://console.groq.com/keys)
+
+### 5. Run locally
+
+```bash
+uvicorn main:app --reload
+```
+
+Visit `http://localhost:8000/` to see the health check.
+
+### 6. Set your webhook
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook?url=<YOUR_PUBLIC_URL>/webhook"
+```
+
+## 🤖 Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Start the bot and register |
+| `/checkin on` | Enable automatic check-in messages |
+| `/checkin off` | Disable check-ins |
+
+## 🧪 Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+## 📁 Project Structure
+
+```
+calmnest-bot/
+├── main.py              # FastAPI app, webhook, startup
+├── bot/
+│   ├── config.py        # Env, logging, constants
+│   ├── memory.py        # SQLite conversation memory
+│   ├── ai.py            # Groq LLM integration
+│   ├── handlers.py      # Telegram command & message handlers
+│   └── scheduler.py     # Automatic check-in scheduler
+├── tests/               # Unit tests
+├── .env.example         # Environment template
+├── requirements.txt     # Pinned dependencies
+└── CHANGELOG.md         # Version history
+```
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+## 🤝 Contributing
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes
+4. Push and open a Pull Request
+
+## 📄 License
+
+This project is open source. Feel free to use and modify.
