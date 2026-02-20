@@ -1,7 +1,7 @@
 fastapi==0.115.0
 gunicorn==23.0.0
 uvicorn==0.30.6
-python-telegram-bot==20.9
+python-telegram-bot==20.8
 groq==0.11.0
 python-dotenv==1.0.1
 slowapi==0.1.9
