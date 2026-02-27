@@ -140,8 +140,13 @@ def get_recent_messages(user_id: int) -> list[dict]:
         rows = conn.execute(
             """
             SELECT role, content
-            FROM messages
-            WHERE user_id = ?
+            FROM (
+                SELECT role, content, created_at
+                FROM messages
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT 50
+            ) 
             ORDER BY created_at ASC
             """,
             (user_id,),

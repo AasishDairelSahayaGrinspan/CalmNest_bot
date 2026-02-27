@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     await telegram_app.initialize()
+    await telegram_app.start()
     scheduler = create_scheduler(telegram_app.bot)
     scheduler.start()
     logger.info("CalmNest is alive 🌿")
@@ -51,6 +52,8 @@ async def lifespan(app: FastAPI):
     if scheduler:
         scheduler.shutdown()
         logger.info("Scheduler stopped")
+    await telegram_app.stop()
+    await telegram_app.shutdown()
 
 
 # ---------------- FASTAPI APP ---------------- #

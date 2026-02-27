@@ -45,15 +45,15 @@ class TestSaveMessage:
         assert messages[1]["content"] == "Reply to first"
         assert messages[2]["content"] == "Second"
 
-    def test_returns_all_messages(self):
+    def test_returns_recent_messages_limit(self):
         register_user(1, 1001)
-        for i in range(10):
+        for i in range(60):
             save_message(1, "user", f"Message {i}")
         messages = get_recent_messages(1)
-        # Should return ALL 10 messages now (no limit)
-        assert len(messages) == 10
-        assert messages[0]["content"] == "Message 0"
-        assert messages[-1]["content"] == "Message 9"
+        # Should return only the latest 50 messages
+        assert len(messages) == 50
+        assert messages[0]["content"] == "Message 10"
+        assert messages[-1]["content"] == "Message 59"
 
     def test_isolates_users(self):
         register_user(1, 1001)
