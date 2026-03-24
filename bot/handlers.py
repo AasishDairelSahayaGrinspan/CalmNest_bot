@@ -1,7 +1,8 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.ai import get_ai_reply_async
-from bot.memory import save_message, get_recent_messages, register_user, set_checkin_enabled, get_checkin_enabled
+from bot.memory import register_user, set_checkin_enabled, get_checkin_enabled
+from bot.memory_provider import memory_provider
 from bot.config import logger
 
 
@@ -70,12 +71,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Ensure user is registered
     register_user(user.id, update.message.chat_id)
-    save_message(user.id, "user", user_text)
+    memory_provider.save(user.id, "user", user_text, chat_id=update.message.chat_id)
 
     try:
-        memory = get_recent_messages(user.id)
+        memory = memory_provider.get_context(user.id, latest_user_text=user_text)
         reply = await get_ai_reply_async(memory)
-        save_message(user.id, "assistant", reply)
+        memory_provider.save(user.id, "assistant", reply, chat_id=update.message.chat_id)
         await update.message.reply_text(reply)
         logger.info("Replied to user %d", user.id)
     except Exception as e:

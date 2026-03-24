@@ -10,6 +10,8 @@ venv/
 
 # Database
 *.db
+*.db-wal
+*.db-shm
 
 # Editor / OS
 .DS_Store

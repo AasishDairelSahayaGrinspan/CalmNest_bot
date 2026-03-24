@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional
 from dotenv import load_dotenv
 
 # ---------------- ENV ---------------- #
@@ -59,3 +60,25 @@ logger = logging.getLogger("calmnest")
 
 # Database
 DB_PATH = os.getenv("CALMNEST_DB_PATH", "calmnest.db")
+
+
+def _as_bool(value: Optional[str], default: bool = False) -> bool:
+    """Parse common env var booleans."""
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Optional Supermemory integration
+SUPERMEMORY_ENABLED = _as_bool(os.getenv("ENABLE_SUPERMEMORY"), default=False)
+SUPERMEMORY_API_KEY = os.getenv("SUPERMEMORY_API_KEY", "").strip()
+SUPERMEMORY_BASE_URL = os.getenv("SUPERMEMORY_BASE_URL", "https://api.supermemory.ai").rstrip("/")
+SUPERMEMORY_TIMEOUT_MS = int(os.getenv("SUPERMEMORY_TIMEOUT_MS", "2500"))
+SUPERMEMORY_SEARCH_LIMIT = int(os.getenv("SUPERMEMORY_SEARCH_LIMIT", "6"))
+
+if SUPERMEMORY_ENABLED and not SUPERMEMORY_API_KEY:
+    logger.warning(
+        "ENABLE_SUPERMEMORY is true but SUPERMEMORY_API_KEY is missing; "
+        "Supermemory integration is disabled."
+    )
+    SUPERMEMORY_ENABLED = False

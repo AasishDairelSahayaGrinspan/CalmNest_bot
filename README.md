@@ -57,6 +57,13 @@ Edit `.env` and add your keys:
 - **TELEGRAM_BOT_TOKEN** — get from [@BotFather](https://t.me/BotFather)
 - **GROQ_API_KEY** — get from [Groq Console](https://console.groq.com/keys)
 
+Optional (Supermemory enhancement):
+- **ENABLE_SUPERMEMORY** — `true` to enable external memory search/write (default: `false`)
+- **SUPERMEMORY_API_KEY** — required when Supermemory is enabled
+- **SUPERMEMORY_BASE_URL** — default: `https://api.supermemory.ai`
+- **SUPERMEMORY_TIMEOUT_MS** — request timeout in milliseconds (default: `2500`)
+- **SUPERMEMORY_SEARCH_LIMIT** — max search results used for context (default: `6`)
+
 ### 5. Run locally
 
 ```bash
