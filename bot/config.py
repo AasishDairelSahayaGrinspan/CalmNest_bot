@@ -58,8 +58,19 @@ logging.basicConfig(
 
 logger = logging.getLogger("calmnest")
 
+# Avoid printing full request URLs (can include sensitive tokens in some SDK calls).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def _default_db_path() -> str:
+    """Choose a persistent SQLite path when running on Azure App Service."""
+    if os.getenv("WEBSITE_INSTANCE_ID") or os.getenv("WEBSITE_SITE_NAME"):
+        return "/home/site/calmnest.db"
+    return "calmnest.db"
+
+
 # Database
-DB_PATH = os.getenv("CALMNEST_DB_PATH", "calmnest.db")
+DB_PATH = os.getenv("CALMNEST_DB_PATH") or _default_db_path()
 
 
 def _as_bool(value: Optional[str], default: bool = False) -> bool:

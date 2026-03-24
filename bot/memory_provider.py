@@ -35,8 +35,10 @@ class MemoryProvider:
 
     def get_context(self, user_id: int, latest_user_text: str) -> list[dict]:
         local_messages = get_recent_messages(user_id)
+        local_count = len(local_messages)
 
         if not self.super_enabled or not self.super_client:
+            logger.info("Context for user %d: sqlite_only=%d", user_id, local_count)
             return local_messages
 
         try:
@@ -44,9 +46,11 @@ class MemoryProvider:
             self.super_failures = 0
         except SupermemoryError as exc:
             self._record_failure(exc)
+            logger.info("Context for user %d: sqlite_only=%d (supermemory failed)", user_id, local_count)
             return local_messages
 
         if not snippets:
+            logger.info("Context for user %d: sqlite_only=%d, supermemory=0", user_id, local_count)
             return local_messages
 
         # Keep injected context concise to avoid excessive token usage.
@@ -59,6 +63,12 @@ class MemoryProvider:
                 f"{joined}"
             ),
         }
+        logger.info(
+            "Context for user %d: sqlite_only=%d, supermemory=%d",
+            user_id,
+            local_count,
+            min(len(snippets), 5),
+        )
         return [memory_hint, *local_messages]
 
 

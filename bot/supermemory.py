@@ -1,4 +1,5 @@
 import json
+import socket
 import time
 from typing import Optional
 from urllib import error, request
@@ -36,16 +37,20 @@ class SupermemoryClient:
             },
         )
         started = time.time()
-        try:
-            with request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                raw = resp.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise SupermemoryError(f"HTTP {exc.code}: {detail}") from exc
-        except error.URLError as exc:
-            raise SupermemoryError(f"Network error: {exc.reason}") from exc
-        except TimeoutError as exc:
-            raise SupermemoryError("Request timed out") from exc
+        attempts = 2
+        for attempt in range(1, attempts + 1):
+            try:
+                with request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                    raw = resp.read().decode("utf-8")
+                break
+            except error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                raise SupermemoryError(f"HTTP {exc.code}: {detail}") from exc
+            except (error.URLError, TimeoutError, socket.timeout) as exc:
+                if attempt >= attempts:
+                    reason = getattr(exc, "reason", str(exc))
+                    raise SupermemoryError(f"Network error: {reason}") from exc
+                time.sleep(0.25)
 
         elapsed_ms = int((time.time() - started) * 1000)
         logger.debug("Supermemory %s %s completed in %dms", method, path, elapsed_ms)
@@ -60,8 +65,10 @@ class SupermemoryClient:
         return f"user_{user_id}"
 
     def add_message(self, user_id: int, role: str, content: str, chat_id: Optional[int] = None):
+        # Include role in content so retrieved snippets preserve dialogue semantics.
+        indexed_content = f"[{role}] {content}"
         payload = {
-            "content": content,
+            "content": indexed_content,
             "containerTag": self._container_tag(user_id),
             "metadata": {
                 "role": role,
@@ -76,20 +83,25 @@ class SupermemoryClient:
     def search_context(self, user_id: int, query_text: str) -> list[str]:
         payload = {
             "q": query_text,
-            "containerTags": [self._container_tag(user_id)],
+            "containerTag": self._container_tag(user_id),
             "limit": SUPERMEMORY_SEARCH_LIMIT,
-            "onlyMatchingChunks": True,
+            "searchMode": "hybrid",
             "rerank": True,
         }
-        data = self._request("POST", "/v3/search", payload)
+        data = self._request("POST", "/v4/search", payload)
 
         snippets: list[str] = []
         for result in data.get("results", []):
-            chunks = result.get("chunks") or []
-            if chunks:
-                text = (chunks[0].get("content") or "").strip()
-            else:
-                text = (result.get("content") or "").strip()
+            text = (
+                result.get("memory")
+                or result.get("chunk")
+                or result.get("content")
+                or ""
+            ).strip()
+            if not text:
+                chunks = result.get("chunks") or []
+                if chunks:
+                    text = (chunks[0].get("content") or "").strip()
             if text:
                 snippets.append(text)
 
