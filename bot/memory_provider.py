@@ -1,5 +1,5 @@
 from bot.config import SUPERMEMORY_ENABLED, logger
-from bot.memory import get_recent_messages, save_message
+from bot.memory import get_recent_messages, save_message, get_user_profile
 from bot.supermemory import SupermemoryClient, SupermemoryError
 from typing import Optional
 
@@ -36,10 +36,28 @@ class MemoryProvider:
     def get_context(self, user_id: int, latest_user_text: str) -> list[dict]:
         local_messages = get_recent_messages(user_id)
         local_count = len(local_messages)
+        profile = get_user_profile(user_id)
+
+        profile_hint = None
+        first_name = (profile.get("first_name") or "").strip()
+        username = (profile.get("username") or "").strip()
+        if first_name or username:
+            profile_text = []
+            if first_name:
+                profile_text.append(f"User first name: {first_name}")
+            if username:
+                profile_text.append(f"Telegram username: @{username}")
+            profile_hint = {
+                "role": "system",
+                "content": (
+                    "Known profile details from prior interactions:\n"
+                    + "\n".join(f"- {line}" for line in profile_text)
+                ),
+            }
 
         if not self.super_enabled or not self.super_client:
             logger.info("Context for user %d: sqlite_only=%d", user_id, local_count)
-            return local_messages
+            return ([profile_hint] if profile_hint else []) + local_messages
 
         try:
             snippets = self.super_client.search_context(user_id=user_id, query_text=latest_user_text)
@@ -47,11 +65,11 @@ class MemoryProvider:
         except SupermemoryError as exc:
             self._record_failure(exc)
             logger.info("Context for user %d: sqlite_only=%d (supermemory failed)", user_id, local_count)
-            return local_messages
+            return ([profile_hint] if profile_hint else []) + local_messages
 
         if not snippets:
             logger.info("Context for user %d: sqlite_only=%d, supermemory=0", user_id, local_count)
-            return local_messages
+            return ([profile_hint] if profile_hint else []) + local_messages
 
         # Keep injected context concise to avoid excessive token usage.
         joined = "\n".join(f"- {s}" for s in snippets[:5])
@@ -69,7 +87,10 @@ class MemoryProvider:
             local_count,
             min(len(snippets), 5),
         )
-        return [memory_hint, *local_messages]
+        prefix = [memory_hint]
+        if profile_hint:
+            prefix.append(profile_hint)
+        return [*prefix, *local_messages]
 
 
 memory_provider = MemoryProvider()

@@ -25,7 +25,9 @@ SYSTEM_PROMPT = (
     "You are CalmNest, a calm, warm, and supportive mental wellbeing assistant. "
     "You listen without judgment. "
     "You do NOT give medical advice or diagnoses. "
-    "Keep responses gentle, empathetic, and concise."
+    "Keep responses gentle, empathetic, and concise. "
+    "Use known user details naturally (such as their first name) when available. "
+    "Do not sound robotic or scripted."
 )
 
 # ---------------- CHECKIN SETTINGS ---------------- #
@@ -85,7 +87,7 @@ SUPERMEMORY_ENABLED = _as_bool(os.getenv("ENABLE_SUPERMEMORY"), default=False)
 SUPERMEMORY_API_KEY = os.getenv("SUPERMEMORY_API_KEY", "").strip()
 SUPERMEMORY_BASE_URL = os.getenv("SUPERMEMORY_BASE_URL", "https://api.supermemory.ai").rstrip("/")
 SUPERMEMORY_TIMEOUT_MS = int(os.getenv("SUPERMEMORY_TIMEOUT_MS", "2500"))
-SUPERMEMORY_SEARCH_LIMIT = int(os.getenv("SUPERMEMORY_SEARCH_LIMIT", "6"))
+SUPERMEMORY_SEARCH_LIMIT = int(os.getenv("SUPERMEMORY_SEARCH_LIMIT", "100"))
 
 if SUPERMEMORY_ENABLED and not SUPERMEMORY_API_KEY:
     logger.warning(

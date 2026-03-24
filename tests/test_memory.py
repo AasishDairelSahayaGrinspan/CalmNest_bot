@@ -92,6 +92,26 @@ class TestUserRegistration:
         set_checkin_enabled(42, True)
         assert get_checkin_enabled(42) is True
 
+    def test_stores_first_name_and_username(self):
+        from bot.memory import get_user_profile
+
+        register_user(77, 7700, first_name="Aasish", username="calm_user")
+        profile = get_user_profile(77)
+
+        assert profile["first_name"] == "Aasish"
+        assert profile["username"] == "calm_user"
+
+    def test_keeps_existing_profile_when_new_values_empty(self):
+        from bot.memory import get_user_profile
+
+        register_user(88, 8800, first_name="Dairel", username="steady")
+        register_user(88, 8811, first_name="", username="")
+        profile = get_user_profile(88)
+
+        assert profile["chat_id"] == 8811
+        assert profile["first_name"] == "Dairel"
+        assert profile["username"] == "steady"
+
 
 class TestCheckinSlot:
     def test_update_and_read_slot(self):

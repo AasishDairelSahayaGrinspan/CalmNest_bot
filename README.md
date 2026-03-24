@@ -65,7 +65,7 @@ Optional (Supermemory enhancement):
 - **SUPERMEMORY_API_KEY** — required when Supermemory is enabled
 - **SUPERMEMORY_BASE_URL** — default: `https://api.supermemory.ai`
 - **SUPERMEMORY_TIMEOUT_MS** — request timeout in milliseconds (default: `2500`)
-- **SUPERMEMORY_SEARCH_LIMIT** — max search results used for context (default: `6`)
+- **SUPERMEMORY_SEARCH_LIMIT** — max search results used for context (default: `100`)
 
 ### 5. How memory works
 

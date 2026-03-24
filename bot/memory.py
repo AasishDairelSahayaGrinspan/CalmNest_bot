@@ -22,6 +22,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 user_id    INTEGER PRIMARY KEY,
                 chat_id    INTEGER NOT NULL,
+                first_name TEXT DEFAULT '',
+                username   TEXT DEFAULT '',
                 checkin_enabled INTEGER DEFAULT 1,
                 last_checkin_slot TEXT DEFAULT '',
                 created_at REAL NOT NULL
@@ -39,6 +41,17 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_messages_user
                 ON messages(user_id, created_at DESC);
         """)
+
+        # Lightweight forward-compatible migration for older DBs.
+        user_cols = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(users)").fetchall()
+        }
+        if "first_name" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN first_name TEXT DEFAULT ''")
+        if "username" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN username TEXT DEFAULT ''")
+
         conn.commit()
         logger.info("Database initialized at %s", DB_PATH)
     finally:
@@ -48,20 +61,53 @@ def init_db():
 # ---------------- USER MANAGEMENT ---------------- #
 
 
-def register_user(user_id: int, chat_id: int):
-    """Register a user or update their chat_id."""
+def register_user(user_id: int, chat_id: int, first_name: str = "", username: str = ""):
+    """Register a user and keep profile fields fresh."""
     conn = _get_connection()
     try:
         conn.execute(
             """
-            INSERT INTO users (user_id, chat_id, created_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET chat_id = excluded.chat_id
+            INSERT INTO users (user_id, chat_id, first_name, username, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                chat_id = excluded.chat_id,
+                first_name = CASE
+                    WHEN excluded.first_name != '' THEN excluded.first_name
+                    ELSE users.first_name
+                END,
+                username = CASE
+                    WHEN excluded.username != '' THEN excluded.username
+                    ELSE users.username
+                END
             """,
-            (user_id, chat_id, time.time()),
+            (user_id, chat_id, (first_name or "").strip(), (username or "").strip(), time.time()),
         )
         conn.commit()
         logger.info("Registered user %d (chat_id=%d)", user_id, chat_id)
+    finally:
+        conn.close()
+
+
+def get_user_profile(user_id: int) -> dict:
+    """Return persisted user profile fields used for personalization."""
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT user_id, chat_id, first_name, username
+            FROM users
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return {}
+        return {
+            "user_id": row["user_id"],
+            "chat_id": row["chat_id"],
+            "first_name": row["first_name"] or "",
+            "username": row["username"] or "",
+        }
     finally:
         conn.close()
 
@@ -97,7 +143,11 @@ def get_all_checkin_users() -> list[dict]:
     conn = _get_connection()
     try:
         rows = conn.execute(
-            "SELECT user_id, chat_id, last_checkin_slot FROM users WHERE checkin_enabled = 1"
+            """
+            SELECT user_id, chat_id, first_name, username, last_checkin_slot
+            FROM users
+            WHERE checkin_enabled = 1
+            """
         ).fetchall()
         return [dict(row) for row in rows]
     finally:

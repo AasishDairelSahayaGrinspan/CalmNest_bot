@@ -71,3 +71,15 @@ def test_save_falls_back_to_sqlite_when_supermemory_add_fails():
 
     assert len(stored) == 1
     assert stored[0]["content"] == "fallback works"
+
+
+def test_get_context_includes_profile_hint_when_name_known():
+    register_user(4, 4004, first_name="Aasish", username="")
+    provider = MemoryProvider()
+    provider.super_enabled = False
+
+    provider.save(4, "user", "hello there", chat_id=4004)
+    context = provider.get_context(4, latest_user_text="hello there")
+
+    assert context[0]["role"] == "system"
+    assert "User first name: Aasish" in context[0]["content"]
