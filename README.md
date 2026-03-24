@@ -1,4 +1,4 @@
-# 🌿 CalmNest Bot
+# CalmNest Bot
 
 A warm, empathetic **mental wellbeing companion** on Telegram — powered by AI.
 
@@ -8,13 +8,13 @@ CalmNest listens without judgment, offers gentle support, and sends optional dai
 
 ## ✨ Features
 
-- 💬 **Empathetic AI conversations** — powered by Llama 3.3 70B via Groq
-- 🧠 **Persistent local memory** — SQLite-backed conversation history (survives restarts)
-- 🔎 **Optional Supermemory recall** — hybrid semantic search (`/v4/search`) for long-term context
-- 🧯 **Resilient fallback design** — SQLite stays source-of-truth; Supermemory auto-disables after repeated failures
-- ⏰ **Scheduled check-ins** — gentle morning, afternoon, evening & night messages (opt-in)
-- 🛡️ **Rate limiting** — webhook abuse protection
-- 🔒 **Ethical guardrails** — system prompt prevents medical advice/diagnoses
+- **Empathetic AI conversations** — powered by Llama 3.3 70B via Groq
+- **Persistent local memory** — SQLite-backed conversation history (survives restarts)
+- **Optional Supermemory recall** — hybrid semantic search (`/v4/search`) for long-term context
+- **Resilient fallback design** — SQLite stays source-of-truth; Supermemory auto-disables after repeated failures
+- **Scheduled check-ins** — gentle morning, afternoon, evening & night messages (opt-in)
+- **Rate limiting** — webhook abuse protection
+- **Ethical guardrails** — system prompt prevents medical advice/diagnoses
 
 ## 🧰 Tech Stack
 
