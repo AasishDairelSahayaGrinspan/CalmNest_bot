@@ -9,7 +9,9 @@ CalmNest listens without judgment, offers gentle support, and sends optional dai
 ## ✨ Features
 
 - 💬 **Empathetic AI conversations** — powered by Llama 3.3 70B via Groq
-- 🧠 **Persistent memory** — remembers your last 6 messages (SQLite-backed, survives restarts)
+- 🧠 **Persistent local memory** — SQLite-backed conversation history (survives restarts)
+- 🔎 **Optional Supermemory recall** — hybrid semantic search (`/v4/search`) for long-term context
+- 🧯 **Resilient fallback design** — SQLite stays source-of-truth; Supermemory auto-disables after repeated failures
 - ⏰ **Scheduled check-ins** — gentle morning, afternoon, evening & night messages (opt-in)
 - 🛡️ **Rate limiting** — webhook abuse protection
 - 🔒 **Ethical guardrails** — system prompt prevents medical advice/diagnoses
@@ -21,7 +23,7 @@ CalmNest listens without judgment, offers gentle support, and sends optional dai
 | Bot Platform | Telegram (webhooks) |
 | Backend | FastAPI + Gunicorn |
 | AI / LLM | Groq — Llama 3.3 70B Versatile |
-| Database | SQLite |
+| Memory | SQLite + optional Supermemory |
 | Scheduler | APScheduler |
 
 ## 🚀 Setup
@@ -50,12 +52,13 @@ pip install -r requirements.txt
 ### 4. Configure environment
 
 ```bash
-cp .env.example .env
+touch .env
 ```
 
-Edit `.env` and add your keys:
+Edit `.env` and add:
 - **TELEGRAM_BOT_TOKEN** — get from [@BotFather](https://t.me/BotFather)
 - **GROQ_API_KEY** — get from [Groq Console](https://console.groq.com/keys)
+- **CALMNEST_DB_PATH** *(optional)* — SQLite path override (defaults to `calmnest.db`, or `/home/site/calmnest.db` on Azure App Service)
 
 Optional (Supermemory enhancement):
 - **ENABLE_SUPERMEMORY** — `true` to enable external memory search/write (default: `false`)
@@ -64,7 +67,14 @@ Optional (Supermemory enhancement):
 - **SUPERMEMORY_TIMEOUT_MS** — request timeout in milliseconds (default: `2500`)
 - **SUPERMEMORY_SEARCH_LIMIT** — max search results used for context (default: `6`)
 
-### 5. Run locally
+### 5. How memory works
+
+- All incoming/outgoing messages are always saved to SQLite.
+- If Supermemory is enabled, messages are also indexed remotely with role metadata.
+- At response time, CalmNest fetches local recent messages and may prepend a compact system memory hint from Supermemory search results.
+- If Supermemory errors repeatedly, CalmNest automatically falls back to SQLite-only mode.
+
+### 6. Run locally
 
 ```bash
 uvicorn main:app --reload
@@ -72,7 +82,7 @@ uvicorn main:app --reload
 
 Visit `http://localhost:8000/` to see the health check.
 
-### 6. Set your webhook
+### 7. Set your webhook
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook?url=<YOUR_PUBLIC_URL>/webhook"
@@ -89,7 +99,7 @@ curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook?url=<YOUR_PUBL
 ## 🧪 Running Tests
 
 ```bash
-pytest tests/ -v
+python3 -m pytest -q
 ```
 
 ## 📁 Project Structure
@@ -100,11 +110,12 @@ calmnest-bot/
 ├── bot/
 │   ├── config.py        # Env, logging, constants
 │   ├── memory.py        # SQLite conversation memory
+│   ├── memory_provider.py # Memory facade: SQLite + optional Supermemory
+│   ├── supermemory.py   # Supermemory REST client
 │   ├── ai.py            # Groq LLM integration
 │   ├── handlers.py      # Telegram command & message handlers
 │   └── scheduler.py     # Automatic check-in scheduler
 ├── tests/               # Unit tests
-├── .env.example         # Environment template
 ├── requirements.txt     # Pinned dependencies
 └── CHANGELOG.md         # Version history
 ```
