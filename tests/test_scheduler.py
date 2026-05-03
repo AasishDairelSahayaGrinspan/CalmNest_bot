@@ -3,7 +3,9 @@ import pytest
 from unittest.mock import patch
 from datetime import datetime
 
-os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_PHONE_NUMBER_ID", "123456789")
+os.environ.setdefault("WHATSAPP_VERIFY_TOKEN", "test-verify-token")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key-123")
 
 from bot.scheduler import get_current_slot

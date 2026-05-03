@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 # Configure env before importing project modules.
 _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["CALMNEST_DB_PATH"] = _tmp_db.name
-os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_PHONE_NUMBER_ID", "123456789")
+os.environ.setdefault("WHATSAPP_VERIFY_TOKEN", "test-verify-token")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key-123")
 
 from bot.memory import init_db, register_user, get_recent_messages
