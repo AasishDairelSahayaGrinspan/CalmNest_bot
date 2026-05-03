@@ -1,5 +1,6 @@
 import sqlite3
 import time
+import json
 from bot.config import DB_PATH, logger
 
 # ---------------- DATABASE SETUP ---------------- #
@@ -7,8 +8,9 @@ from bot.config import DB_PATH, logger
 
 def _get_connection() -> sqlite3.Connection:
     """Get a SQLite connection with WAL mode for better concurrency."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row
     return conn
@@ -40,6 +42,27 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_messages_user
                 ON messages(user_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS relational_memory (
+                user_id INTEGER PRIMARY KEY,
+                preferred_name TEXT DEFAULT '',
+                stressors TEXT DEFAULT '[]',
+                wins TEXT DEFAULT '[]',
+                coping_preferences TEXT DEFAULT '[]',
+                boundaries TEXT DEFAULT '[]',
+                life_themes TEXT DEFAULT '[]',
+                updated_at REAL NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS user_ritual_state (
+                user_id INTEGER PRIMARY KEY,
+                user_message_count INTEGER DEFAULT 0,
+                last_weekly_reflection_at REAL DEFAULT 0,
+                last_milestone_ack_at REAL DEFAULT 0,
+                updated_at REAL NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            );
         """)
 
         # Lightweight forward-compatible migration for older DBs.
@@ -81,6 +104,23 @@ def register_user(user_id: int, chat_id: int, first_name: str = "", username: st
                 END
             """,
             (user_id, chat_id, (first_name or "").strip(), (username or "").strip(), time.time()),
+        )
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO relational_memory (user_id, preferred_name, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO NOTHING
+            """,
+            (user_id, (first_name or "").strip(), now),
+        )
+        conn.execute(
+            """
+            INSERT INTO user_ritual_state (user_id, updated_at)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO NOTHING
+            """,
+            (user_id, now),
         )
         conn.commit()
         logger.info("Registered user %d (chat_id=%d)", user_id, chat_id)
@@ -177,6 +217,203 @@ def save_message(user_id: int, role: str, content: str):
         conn.execute(
             "INSERT INTO messages (user_id, role, content, created_at) VALUES (?, ?, ?, ?)",
             (user_id, role, content, time.time()),
+        )
+        if role == "user":
+            now = time.time()
+            conn.execute(
+                """
+                INSERT INTO user_ritual_state (user_id, user_message_count, updated_at)
+                VALUES (?, 1, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    user_message_count = user_ritual_state.user_message_count + 1,
+                    updated_at = excluded.updated_at
+                """,
+                (user_id, now),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _safe_load_list(raw: str) -> list[str]:
+    try:
+        value = json.loads(raw or "[]")
+        if isinstance(value, list):
+            cleaned = [str(v).strip() for v in value if str(v).strip()]
+            return cleaned
+    except Exception:
+        pass
+    return []
+
+
+def _merge_unique(existing: list[str], new_items: list[str], limit: int = 10) -> list[str]:
+    seen = {item.lower() for item in existing}
+    merged = list(existing)
+    for item in new_items:
+        normalized = item.strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        merged.append(normalized)
+        seen.add(key)
+    return merged[-limit:]
+
+
+def get_relational_memory(user_id: int) -> dict:
+    """Return structured relational memory for long-term personalization."""
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT preferred_name, stressors, wins, coping_preferences, boundaries, life_themes
+            FROM relational_memory
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return {
+                "preferred_name": "",
+                "stressors": [],
+                "wins": [],
+                "coping_preferences": [],
+                "boundaries": [],
+                "life_themes": [],
+            }
+        return {
+            "preferred_name": (row["preferred_name"] or "").strip(),
+            "stressors": _safe_load_list(row["stressors"]),
+            "wins": _safe_load_list(row["wins"]),
+            "coping_preferences": _safe_load_list(row["coping_preferences"]),
+            "boundaries": _safe_load_list(row["boundaries"]),
+            "life_themes": _safe_load_list(row["life_themes"]),
+        }
+    finally:
+        conn.close()
+
+
+def update_relational_memory(
+    user_id: int,
+    preferred_name: str = "",
+    stressors: list[str] | None = None,
+    wins: list[str] | None = None,
+    coping_preferences: list[str] | None = None,
+    boundaries: list[str] | None = None,
+    life_themes: list[str] | None = None,
+):
+    """Merge new relational facts into persistent structured profile."""
+    existing = get_relational_memory(user_id)
+    merged_preferred_name = (preferred_name or "").strip() or existing["preferred_name"]
+    merged_stressors = _merge_unique(existing["stressors"], stressors or [])
+    merged_wins = _merge_unique(existing["wins"], wins or [])
+    merged_coping = _merge_unique(existing["coping_preferences"], coping_preferences or [])
+    merged_boundaries = _merge_unique(existing["boundaries"], boundaries or [])
+    merged_themes = _merge_unique(existing["life_themes"], life_themes or [], limit=8)
+
+    conn = _get_connection()
+    try:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO relational_memory (
+                user_id,
+                preferred_name,
+                stressors,
+                wins,
+                coping_preferences,
+                boundaries,
+                life_themes,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                preferred_name = excluded.preferred_name,
+                stressors = excluded.stressors,
+                wins = excluded.wins,
+                coping_preferences = excluded.coping_preferences,
+                boundaries = excluded.boundaries,
+                life_themes = excluded.life_themes,
+                updated_at = excluded.updated_at
+            """,
+            (
+                user_id,
+                merged_preferred_name,
+                json.dumps(merged_stressors),
+                json.dumps(merged_wins),
+                json.dumps(merged_coping),
+                json.dumps(merged_boundaries),
+                json.dumps(merged_themes),
+                now,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_ritual_state(user_id: int) -> dict:
+    """Return continuity state used for weekly reflections and milestone acknowledgments."""
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT user_message_count, last_weekly_reflection_at, last_milestone_ack_at
+            FROM user_ritual_state
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return {
+                "user_message_count": 0,
+                "last_weekly_reflection_at": 0.0,
+                "last_milestone_ack_at": 0.0,
+            }
+        return {
+            "user_message_count": int(row["user_message_count"] or 0),
+            "last_weekly_reflection_at": float(row["last_weekly_reflection_at"] or 0.0),
+            "last_milestone_ack_at": float(row["last_milestone_ack_at"] or 0.0),
+        }
+    finally:
+        conn.close()
+
+
+def mark_weekly_reflection(user_id: int):
+    """Mark that a weekly reflection ritual was suggested."""
+    conn = _get_connection()
+    try:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO user_ritual_state (user_id, last_weekly_reflection_at, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                last_weekly_reflection_at = excluded.last_weekly_reflection_at,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_milestone_ack(user_id: int):
+    """Mark that a milestone acknowledgment was suggested."""
+    conn = _get_connection()
+    try:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO user_ritual_state (user_id, last_milestone_ack_at, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                last_milestone_ack_at = excluded.last_milestone_ack_at,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, now, now),
         )
         conn.commit()
     finally:

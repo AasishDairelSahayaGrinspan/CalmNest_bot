@@ -113,7 +113,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         memory = memory_provider.get_context(user.id, latest_user_text=user_text)
-        reply = await get_ai_reply_async(memory)
+        generation_metadata = memory_provider.build_generation_metadata(
+            user.id,
+            latest_user_text=user_text,
+        )
+        reply = await get_ai_reply_async(
+            memory,
+            latest_user_text=user_text,
+            generation_metadata=generation_metadata,
+        )
         memory_provider.save(user.id, "assistant", reply, chat_id=update.message.chat_id)
         await update.message.reply_text(reply)
         logger.info("Replied to user %d", user.id)

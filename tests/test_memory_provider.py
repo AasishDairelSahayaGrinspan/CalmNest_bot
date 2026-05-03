@@ -21,10 +21,16 @@ def teardown_function():
     from bot.memory import _get_connection
 
     conn = _get_connection()
-    conn.execute("DELETE FROM messages")
-    conn.execute("DELETE FROM users")
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DELETE FROM relational_memory")
+        conn.execute("DELETE FROM user_ritual_state")
+        conn.execute("DELETE FROM messages")
+        conn.execute("DELETE FROM users")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def test_get_context_returns_sqlite_when_supermemory_disabled():
@@ -83,3 +89,16 @@ def test_get_context_includes_profile_hint_when_name_known():
 
     assert context[0]["role"] == "system"
     assert "User first name: Aasish" in context[0]["content"]
+
+
+def test_build_generation_metadata_includes_relational_hints():
+    register_user(5, 5005, first_name="Riya", username="")
+    provider = MemoryProvider()
+    provider.super_enabled = False
+
+    provider.save(5, "user", "I am stressed about work deadlines", chat_id=5005)
+    metadata = provider.build_generation_metadata(5, latest_user_text="I am stressed about work deadlines")
+
+    assert "relational_hints" in metadata
+    joined = "\n".join(metadata["relational_hints"])
+    assert "work" in joined.lower()

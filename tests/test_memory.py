@@ -19,10 +19,16 @@ def fresh_db():
     # Clean up messages & users between tests
     from bot.memory import _get_connection
     conn = _get_connection()
-    conn.execute("DELETE FROM messages")
-    conn.execute("DELETE FROM users")
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DELETE FROM relational_memory")
+        conn.execute("DELETE FROM user_ritual_state")
+        conn.execute("DELETE FROM messages")
+        conn.execute("DELETE FROM users")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 class TestSaveMessage:
