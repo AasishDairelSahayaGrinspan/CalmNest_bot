@@ -1,28 +1,18 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-from bot.config import BOT_TOKEN, RATE_LIMIT
-from bot.handlers import start, handle_message, checkin_command
+from bot.config import WHATSAPP_VERIFY_TOKEN, RATE_LIMIT
+from bot.handlers import handle_incoming, send_whatsapp_message
 from bot.memory import init_db
 from bot.scheduler import create_scheduler
 
 logger = logging.getLogger("calmnest")
-
-# ---------------- TELEGRAM APP ---------------- #
-
-telegram_app = Application.builder().token(BOT_TOKEN).build()
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("checkin", checkin_command))
-telegram_app.add_handler(
-    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-)
 
 # ---------------- RATE LIMITER ---------------- #
 
@@ -40,9 +30,7 @@ async def lifespan(app: FastAPI):
 
     # Startup
     init_db()
-    await telegram_app.initialize()
-    await telegram_app.start()
-    scheduler = create_scheduler(telegram_app.bot)
+    scheduler = create_scheduler(send_whatsapp_message)
     scheduler.start()
     logger.info("CalmNest is alive 🌿")
 
@@ -52,8 +40,6 @@ async def lifespan(app: FastAPI):
     if scheduler:
         scheduler.shutdown()
         logger.info("Scheduler stopped")
-    await telegram_app.stop()
-    await telegram_app.shutdown()
 
 
 # ---------------- FASTAPI APP ---------------- #
@@ -73,13 +59,38 @@ async def health():
     return {"status": "CalmNest is alive 🌿"}
 
 
+@app.get("/webhook")
+async def verify_webhook(request: Request):
+    """Handle Meta's one-time webhook verification challenge."""
+    params = request.query_params
+    mode = params.get("hub.mode")
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+
+    if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
+        logger.info("WhatsApp webhook verified")
+        return PlainTextResponse(content=challenge)
+
+    logger.warning("Webhook verification failed (token mismatch)")
+    return PlainTextResponse(content="Forbidden", status_code=403)
+
+
 @app.post("/webhook")
 @limiter.limit(RATE_LIMIT)
-async def telegram_webhook(request: Request):
+async def whatsapp_webhook(request: Request):
+    """Receive and process incoming WhatsApp messages."""
     try:
         data = await request.json()
-        update = Update.de_json(data, telegram_app.bot)
-        await telegram_app.process_update(update)
+        for entry in data.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                for message in value.get("messages", []):
+                    if message.get("type") != "text":
+                        continue
+                    sender = message.get("from", "")
+                    text = (message.get("text") or {}).get("body", "").strip()
+                    if sender and text:
+                        await handle_incoming(sender, text)
         return {"ok": True}
     except Exception as e:
         logger.error("Webhook error: %s", e)
@@ -89,3 +100,4 @@ async def telegram_webhook(request: Request):
 # ---------------- GUNICORN ENTRYPOINT ---------------- #
 
 web_app = app
+

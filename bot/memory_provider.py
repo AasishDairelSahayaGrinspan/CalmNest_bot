@@ -20,7 +20,7 @@ class MemoryProvider:
             self.super_enabled = False
             logger.warning("Supermemory disabled after repeated failures; falling back to SQLite only.")
 
-    def save(self, user_id: int, role: str, content: str, chat_id: Optional[int] = None):
+    def save(self, user_id: str, role: str, content: str, chat_id: Optional[str] = None):
         # SQLite remains source-of-truth fallback.
         save_message(user_id, role, content)
 
@@ -33,7 +33,7 @@ class MemoryProvider:
         except SupermemoryError as exc:
             self._record_failure(exc)
 
-    def get_context(self, user_id: int, latest_user_text: str) -> list[dict]:
+    def get_context(self, user_id: str, latest_user_text: str) -> list[dict]:
         local_messages = get_recent_messages(user_id)
         local_count = len(local_messages)
         profile = get_user_profile(user_id)
@@ -46,7 +46,7 @@ class MemoryProvider:
             if first_name:
                 profile_text.append(f"User first name: {first_name}")
             if username:
-                profile_text.append(f"Telegram username: @{username}")
+                profile_text.append(f"Display name: {username}")
             profile_hint = {
                 "role": "system",
                 "content": (

@@ -2,7 +2,9 @@ import os
 import pytest
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_PHONE_NUMBER_ID", "123456789")
+os.environ.setdefault("WHATSAPP_VERIFY_TOKEN", "test-verify-token")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key-123")
 
 from bot.ai import get_ai_reply

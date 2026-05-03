@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Callable, Awaitable
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.ai import generate_checkin_message_async
 from bot.memory import get_all_checkin_users, update_last_checkin_slot, get_recent_messages
@@ -28,7 +29,7 @@ def get_current_slot() -> str:
 # ---------------- CHECK-IN TASK ---------------- #
 
 
-async def send_checkins(bot):
+async def send_checkins(send_fn: Callable[[str, str], Awaitable[None]]):
     """Send check-in messages to all opted-in users (once per slot)."""
     slot = get_current_slot()
 
@@ -58,21 +59,21 @@ async def send_checkins(bot):
             if not message:
                 message = fallback_by_slot.get(slot, fallback_by_slot["evening"])
 
-            await bot.send_message(chat_id=user["chat_id"], text=message)
+            await send_fn(user["chat_id"], message)
             update_last_checkin_slot(user["user_id"], slot)
             sent_count += 1
-            logger.info("Sent %s check-in to user %d", slot, user["user_id"])
+            logger.info("Sent %s check-in to user %s", slot, user["user_id"])
         except Exception as e:
             try:
                 fallback = fallback_by_slot.get(slot, fallback_by_slot["evening"])
-                await bot.send_message(chat_id=user["chat_id"], text=fallback)
+                await send_fn(user["chat_id"], fallback)
                 update_last_checkin_slot(user["user_id"], slot)
                 sent_count += 1
-                logger.warning("Sent fallback %s check-in to user %d", slot, user["user_id"])
+                logger.warning("Sent fallback %s check-in to user %s", slot, user["user_id"])
             except Exception:
                 pass
             logger.warning(
-                "Failed to send check-in to user %d: %s", user["user_id"], e
+                "Failed to send check-in to user %s: %s", user["user_id"], e
             )
 
     if sent_count > 0:
@@ -82,7 +83,7 @@ async def send_checkins(bot):
 # ---------------- SCHEDULER SETUP ---------------- #
 
 
-def create_scheduler(bot) -> AsyncIOScheduler:
+def create_scheduler(send_fn: Callable[[str, str], Awaitable[None]]) -> AsyncIOScheduler:
     """Create and configure the check-in scheduler."""
     scheduler = AsyncIOScheduler()
 
@@ -91,7 +92,7 @@ def create_scheduler(bot) -> AsyncIOScheduler:
         send_checkins,
         "interval",
         minutes=30,
-        args=[bot],
+        args=[send_fn],
         id="checkin_job",
         replace_existing=True,
     )

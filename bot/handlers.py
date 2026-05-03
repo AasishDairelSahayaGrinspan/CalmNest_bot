@@ -1,11 +1,15 @@
 import re
 
-from telegram import Update
-from telegram.ext import ContextTypes
+import httpx
+
 from bot.ai import get_ai_reply_async
 from bot.memory import register_user, set_checkin_enabled, get_checkin_enabled
 from bot.memory_provider import memory_provider
-from bot.config import logger
+from bot.config import WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, logger
+
+_WHATSAPP_API_URL = (
+    "https://graph.facebook.com/v19.0/{phone_number_id}/messages"
+)
 
 
 def _extract_preferred_name(text: str) -> str:
@@ -25,100 +29,99 @@ def _extract_preferred_name(text: str) -> str:
     return ""
 
 
-# ---------------- /start COMMAND ---------------- #
+# ---------------- WHATSAPP SEND ---------------- #
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the /start command — greet user and register them."""
-    user = update.message.from_user
-    register_user(
-        user.id,
-        update.message.chat_id,
-        first_name=user.first_name or "",
-        username=user.username or "",
-    )
-    logger.info("User %d started the bot", user.id)
-
-    greeting_name = f" {user.first_name.strip()}" if user.first_name else ""
-
-    await update.message.reply_text(
-        f"Hi{greeting_name}, I'm CalmNest.\n"
-        "You can talk to me anytime. I'm here to listen.\n\n"
-        "Commands:\n"
-        "/checkin on — enable daily check-ins\n"
-        "/checkin off — disable check-ins"
-    )
-
-
-# ---------------- /checkin COMMAND ---------------- #
-
-
-async def checkin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /checkin on|off — toggle automatic check-in messages."""
-    user = update.message.from_user
-    register_user(
-        user.id,
-        update.message.chat_id,
-        first_name=user.first_name or "",
-        username=user.username or "",
-    )
-
-    args = context.args
-    if not args or args[0].lower() not in ("on", "off"):
-        enabled = get_checkin_enabled(user.id)
-        status = "enabled ✅" if enabled else "disabled ❌"
-        await update.message.reply_text(
-            f"Check-ins are currently {status}\n\n"
-            "Usage:\n"
-            "/checkin on — I'll send gentle check-ins throughout the day\n"
-            "/checkin off — No automatic messages"
-        )
-        return
-
-    enable = args[0].lower() == "on"
-    set_checkin_enabled(user.id, enable)
-
-    if enable:
-        await update.message.reply_text(
-            "Check-ins enabled.\n"
-            "I'll send a gentle, natural check-in a few times a day."
-        )
-        logger.info("User %d enabled check-ins", user.id)
-    else:
-        await update.message.reply_text(
-            "Check-ins disabled.\n"
-            "You won't receive automatic messages. You can always re-enable with /checkin on"
-        )
-        logger.info("User %d disabled check-ins", user.id)
+async def send_whatsapp_message(to: str, body: str) -> None:
+    """Send a text message via the Meta WhatsApp Cloud API."""
+    url = _WHATSAPP_API_URL.format(phone_number_id=WHATSAPP_PHONE_NUMBER_ID)
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": body},
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
 
 
 # ---------------- MESSAGE HANDLER ---------------- #
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming text messages — save, get AI reply, respond."""
-    user = update.message.from_user
-    user_text = update.message.text
-    inferred_name = _extract_preferred_name(user_text)
-    effective_name = inferred_name or (user.first_name or "")
+async def handle_incoming(sender_phone: str, message_text: str) -> None:
+    """Handle an incoming WhatsApp message — register, route commands, get AI reply."""
+    inferred_name = _extract_preferred_name(message_text)
 
-    # Ensure user is registered
     register_user(
-        user.id,
-        update.message.chat_id,
-        first_name=effective_name,
-        username=user.username or "",
+        sender_phone,
+        sender_phone,
+        first_name=inferred_name,
+        username="",
     )
-    memory_provider.save(user.id, "user", user_text, chat_id=update.message.chat_id)
+
+    lowered = message_text.strip().lower()
+
+    # Keyword commands (replaces Telegram slash commands)
+    if lowered in ("hi", "hello", "start"):
+        await send_whatsapp_message(
+            sender_phone,
+            "Hi, I'm CalmNest.\n"
+            "You can talk to me anytime. I'm here to listen.\n\n"
+            "Send 'checkin on' to enable daily check-ins, "
+            "or 'checkin off' to disable them.",
+        )
+        logger.info("Greeted user %s", sender_phone)
+        return
+
+    if lowered == "checkin on":
+        set_checkin_enabled(sender_phone, True)
+        await send_whatsapp_message(
+            sender_phone,
+            "Check-ins enabled.\n"
+            "I'll send a gentle check-in a few times a day.",
+        )
+        logger.info("User %s enabled check-ins", sender_phone)
+        return
+
+    if lowered == "checkin off":
+        set_checkin_enabled(sender_phone, False)
+        await send_whatsapp_message(
+            sender_phone,
+            "Check-ins disabled.\n"
+            "You won't receive automatic messages. "
+            "Send 'checkin on' to re-enable.",
+        )
+        logger.info("User %s disabled check-ins", sender_phone)
+        return
+
+    if lowered == "checkin":
+        enabled = get_checkin_enabled(sender_phone)
+        status = "enabled ✅" if enabled else "disabled ❌"
+        await send_whatsapp_message(
+            sender_phone,
+            f"Check-ins are currently {status}\n\n"
+            "Send 'checkin on' or 'checkin off' to change.",
+        )
+        return
+
+    # Regular conversational message
+    memory_provider.save(sender_phone, "user", message_text, chat_id=sender_phone)
 
     try:
-        memory = memory_provider.get_context(user.id, latest_user_text=user_text)
+        memory = memory_provider.get_context(sender_phone, latest_user_text=message_text)
         reply = await get_ai_reply_async(memory)
-        memory_provider.save(user.id, "assistant", reply, chat_id=update.message.chat_id)
-        await update.message.reply_text(reply)
-        logger.info("Replied to user %d", user.id)
+        memory_provider.save(sender_phone, "assistant", reply, chat_id=sender_phone)
+        await send_whatsapp_message(sender_phone, reply)
+        logger.info("Replied to user %s", sender_phone)
     except Exception as e:
-        logger.error("AI error for user %d: %s", user.id, e)
-        await update.message.reply_text(
-            "I'm here with you.\nLet's take a breath together."
+        logger.error("AI error for user %s: %s", sender_phone, e)
+        await send_whatsapp_message(
+            sender_phone,
+            "I'm here with you.\nLet's take a breath together.",
         )
+

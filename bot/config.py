@@ -7,11 +7,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-if not BOT_TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN not set — see .env.example")
+if not WHATSAPP_TOKEN:
+    raise RuntimeError("WHATSAPP_TOKEN not set — see .env.example")
+if not WHATSAPP_PHONE_NUMBER_ID:
+    raise RuntimeError("WHATSAPP_PHONE_NUMBER_ID not set — see .env.example")
+if not WHATSAPP_VERIFY_TOKEN:
+    raise RuntimeError("WHATSAPP_VERIFY_TOKEN not set — see .env.example")
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY not set — see .env.example")
 

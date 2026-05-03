@@ -20,8 +20,8 @@ def init_db():
     try:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
-                user_id    INTEGER PRIMARY KEY,
-                chat_id    INTEGER NOT NULL,
+                user_id    TEXT PRIMARY KEY,
+                chat_id    TEXT NOT NULL,
                 first_name TEXT DEFAULT '',
                 username   TEXT DEFAULT '',
                 checkin_enabled INTEGER DEFAULT 1,
@@ -61,7 +61,7 @@ def init_db():
 # ---------------- USER MANAGEMENT ---------------- #
 
 
-def register_user(user_id: int, chat_id: int, first_name: str = "", username: str = ""):
+def register_user(user_id: str, chat_id: str, first_name: str = "", username: str = ""):
     """Register a user and keep profile fields fresh."""
     conn = _get_connection()
     try:
@@ -80,15 +80,15 @@ def register_user(user_id: int, chat_id: int, first_name: str = "", username: st
                     ELSE users.username
                 END
             """,
-            (user_id, chat_id, (first_name or "").strip(), (username or "").strip(), time.time()),
+            (str(user_id), str(chat_id), (first_name or "").strip(), (username or "").strip(), time.time()),
         )
         conn.commit()
-        logger.info("Registered user %d (chat_id=%d)", user_id, chat_id)
+        logger.info("Registered user %s (chat_id=%s)", user_id, chat_id)
     finally:
         conn.close()
 
 
-def get_user_profile(user_id: int) -> dict:
+def get_user_profile(user_id: str) -> dict:
     """Return persisted user profile fields used for personalization."""
     conn = _get_connection()
     try:
@@ -112,7 +112,7 @@ def get_user_profile(user_id: int) -> dict:
         conn.close()
 
 
-def set_checkin_enabled(user_id: int, enabled: bool):
+def set_checkin_enabled(user_id: str, enabled: bool):
     """Enable or disable check-ins for a user."""
     conn = _get_connection()
     try:
@@ -125,7 +125,7 @@ def set_checkin_enabled(user_id: int, enabled: bool):
         conn.close()
 
 
-def get_checkin_enabled(user_id: int) -> bool:
+def get_checkin_enabled(user_id: str) -> bool:
     """Check if a user has check-ins enabled."""
     conn = _get_connection()
     try:
@@ -154,7 +154,7 @@ def get_all_checkin_users() -> list[dict]:
         conn.close()
 
 
-def update_last_checkin_slot(user_id: int, slot: str):
+def update_last_checkin_slot(user_id: str, slot: str):
     """Update the last check-in slot for anti-spam."""
     conn = _get_connection()
     try:
@@ -170,7 +170,7 @@ def update_last_checkin_slot(user_id: int, slot: str):
 # ---------------- MESSAGE MEMORY ---------------- #
 
 
-def save_message(user_id: int, role: str, content: str):
+def save_message(user_id: str, role: str, content: str):
     """Save a message to the database."""
     conn = _get_connection()
     try:
@@ -183,7 +183,7 @@ def save_message(user_id: int, role: str, content: str):
         conn.close()
 
 
-def get_recent_messages(user_id: int) -> list[dict]:
+def get_recent_messages(user_id: str) -> list[dict]:
     """Get ALL messages for a user (oldest first)."""
     conn = _get_connection()
     try:

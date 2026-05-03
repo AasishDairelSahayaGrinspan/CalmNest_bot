@@ -5,7 +5,9 @@ import pytest
 # Set a temp DB path BEFORE importing bot modules
 _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["CALMNEST_DB_PATH"] = _tmp_db.name
-os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_TOKEN", "test-token-123")
+os.environ.setdefault("WHATSAPP_PHONE_NUMBER_ID", "123456789")
+os.environ.setdefault("WHATSAPP_VERIFY_TOKEN", "test-verify-token")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key-123")
 
 from bot.memory import init_db, save_message, get_recent_messages, register_user, set_checkin_enabled, get_checkin_enabled, get_all_checkin_users, update_last_checkin_slot
@@ -72,14 +74,14 @@ class TestUserRegistration:
     def test_registers_user(self):
         register_user(42, 4200)
         users = get_all_checkin_users()
-        assert any(u["user_id"] == 42 for u in users)
+        assert any(u["user_id"] == "42" for u in users)
 
     def test_updates_chat_id(self):
         register_user(42, 4200)
         register_user(42, 9999)  # update
         users = get_all_checkin_users()
-        user = next(u for u in users if u["user_id"] == 42)
-        assert user["chat_id"] == 9999
+        user = next(u for u in users if u["user_id"] == "42")
+        assert user["chat_id"] == "9999"
 
     def test_checkin_enabled_by_default(self):
         register_user(42, 4200)
@@ -108,7 +110,7 @@ class TestUserRegistration:
         register_user(88, 8811, first_name="", username="")
         profile = get_user_profile(88)
 
-        assert profile["chat_id"] == 8811
+        assert profile["chat_id"] == "8811"
         assert profile["first_name"] == "Dairel"
         assert profile["username"] == "steady"
 
@@ -118,13 +120,13 @@ class TestCheckinSlot:
         register_user(1, 1001)
         update_last_checkin_slot(1, "morning")
         users = get_all_checkin_users()
-        user = next(u for u in users if u["user_id"] == 1)
+        user = next(u for u in users if u["user_id"] == "1")
         assert user["last_checkin_slot"] == "morning"
 
     def test_anti_spam_different_slots(self):
         register_user(1, 1001)
         update_last_checkin_slot(1, "morning")
         users = get_all_checkin_users()
-        user = next(u for u in users if u["user_id"] == 1)
+        user = next(u for u in users if u["user_id"] == "1")
         # Should NOT match afternoon
         assert user["last_checkin_slot"] != "afternoon"

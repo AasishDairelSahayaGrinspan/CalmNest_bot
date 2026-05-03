@@ -72,7 +72,7 @@ class SupermemoryClient:
             "containerTag": self._container_tag(user_id),
             "metadata": {
                 "role": role,
-                "source": "telegram",
+                "source": "whatsapp",
             },
         }
         if chat_id is not None:
